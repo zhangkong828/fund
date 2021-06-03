@@ -18,6 +18,14 @@
             padding: 0;
             margin: 0;
         }
+
+        .plus {
+            color: red;
+        }
+
+        .minus {
+            color: green;
+        }
     </style>
 </head>
 
@@ -41,7 +49,68 @@
                 </el-dropdown>
             </el-header>
             <el-main>
-
+                <el-row>
+                    <el-col :span="8" :offset="8">
+                        <el-card shadow="hover">
+                            <el-descriptions title="资金总览" :column="1">
+                                <template #extra>
+                                    <el-button type="primary" size="small">操作</el-button>
+                                  </template>
+                                <el-descriptions-item label="总金额(元)">18100000000</el-descriptions-item>
+                                <el-descriptions-item label="持有收益(元)">18100000000</el-descriptions-item>
+                              </el-descriptions>
+                        </el-card>
+                    </el-col>
+                </el-row>
+                <el-row>
+                    <el-col :span="16" :offset="4">
+                        <el-divider content-position="left">基金看板</el-divider>
+                        <el-table :data="fundInfo" border>
+                            <el-table-column prop="code" label="基金代码"></el-table-column>
+                            <el-table-column prop="name" label="基金名称" width="200"></el-table-column>
+                            <el-table-column label="持有金额(元)" sortable :sort-by="['jzj']">
+                                <template #default="scope">
+                                    <el-popover effect="light" trigger="hover" placement="top">
+                                        <template #default>
+                                            <p>持仓单价: {{ scope.row.ccdj.toString() }}</p>
+                                            <p>持仓份额: {{ scope.row.ccfe.toString() }}</p>
+                                            <p>成本价: {{ scope.row.ccj.toFixed(2) }}</p>
+                                        </template>
+                                        <template #reference>
+                                            <p class="plus">{{ scope.row.jzj.toFixed(2) }}</p>
+                                        </template>
+                                    </el-popover>
+                                </template>
+                            </el-table-column>
+                            <el-table-column label="净值">
+                                <template #default="scope">
+                                    <p>{{ scope.row.dwjz.toString()}}</p>
+                                    <p>{{ scope.row.jzrq.toString() }}</p>
+                                </template>
+                            </el-table-column>
+                            <el-table-column label="持有收益(元)" sortable :sort-by="['jzyl']">
+                                <template #default="scope">
+                                    <p :class="[scope.row.jzyl>0?'plus':'minus']">{{ scope.row.jzyl.toFixed(2) }}</p>
+                                </template>
+                            </el-table-column>
+                            <el-table-column label="估值" sortable :sort-by="['gszzl']">
+                                <template #default="scope">
+                                    <p>
+                                        <span
+                                            :class="[scope.row.gszzl>0?'plus':'minus']">{{scope.row.gszzl.toString()}}%</span>
+                                        [<span>{{scope.row.gsz.toString()}}</span>]
+                                    </p>
+                                    <p>{{ scope.row.gztime.toString() }}</p>
+                                </template>
+                            </el-table-column>
+                            <el-table-column label="今日预估(元)" sortable :sort-by="['gzyl']">
+                                <template #default="scope">
+                                    <p :class="[scope.row.gzyl>0?'plus':'minus']">{{ scope.row.gzyl.toFixed(2) }}</p>
+                                </template>
+                            </el-table-column>
+                        </el-table>
+                    </el-col>
+                </el-row>
             </el-main>
         </el-container>
         <el-dialog title="基金管理" v-model="dialogFundVisible" :close-on-click-modal="false">
@@ -83,6 +152,9 @@
         </el-dialog>
     </div>
     <script>
+        function jsonpgz(data) {
+            return (data);
+        }
         const App = {
             data() {
                 return {
@@ -93,7 +165,8 @@
                         code: "",//基金代码
                         ccdj: 0,//持仓单价
                         ccfe: 0//持仓份额
-                    }
+                    },
+                    fundInfo: []
                 }
             },
             watch: {
@@ -106,50 +179,16 @@
                 }
             },
             methods: {
-                getFunds() {
+                initFunds() {
                     var val = localStorage.getItem('funds');
                     if (val != null) {
                         this.funds = JSON.parse(val);
-                        if (this.funds.length > 0) {
-                            let i = 0;
-                            this.funds.forEach(item => {
-                                item.ccdj = new BigNumber(item.ccdj);
-                                item.ccfe = new BigNumber(item.ccfe);
-                                //持仓成本价
-                                item.ccj = item.ccdj.times(item.ccfe);
-
-                                let url = "http://fundgz.1234567.com.cn/js/" + item.code + ".js";
-                                $.ajax({
-                                    url: url,
-                                    type: "GET",
-                                    dataType: "jsonp",
-                                    jsonpCallback: "jsonpgz",
-                                    success: function (res) {
-                                        //jsonpgz({"jzrq":"2021-02-23","dwjz":"1.5880","gsz":"1.5803","gszzl":"-0.49","gztime":"2021-02-24 15:00"});
-                                        //console.log(res);
-                                        //单位净值
-                                        item.dwjz = new BigNumber(res["dwjz"]);
-                                        //日期
-                                        item.jzrq = res["jzrq"];
-                                        item.gsz = new BigNumber(res["gsz"]);
-                                        item.gszzl = new BigNumber(res["gszzl"]);
-                                        item.gztime = res["gztime"];
-                                        //计算净值价/净值盈利
-                                        item.jzj = item.dwjz.times(item.ccfe);
-                                        item.jzgetmoney = item.jzj.minus(item.ccj);
-                                        //计算估值价/估值盈利
-                                        item.gzj = item.gsz.times(item.ccfe);
-                                        item.getmoney = item.gzj.minus(item.ccj);
-                                        console.log(item);
-                                        i++;
-                                        //if (i == fundinfos.length) { console.log("ok") }
-                                    }
-                                });
-
-                            });
+                        if (this.funds.length != 0) {
+                            this.query();
                             return;
                         }
                     }
+                    this.funds.push({ code: "161725", ccdj: 0, ccfe: 0 });//白酒 yyds
                     this.$message.error({ showClose: true, message: '请先添加基金代码' });
                 },
                 addFund() {
@@ -161,9 +200,56 @@
                     this.funds.splice(index, 1);
                 },
                 editFund(index, row) { },
+                query() {
+                    var that = this;
+                    if (that.funds.length > 0) {
+                        that.funds.forEach(item => {
+                            var info = { code: item.code };
+                            info.ccdj = new BigNumber(item.ccdj);
+                            info.ccfe = new BigNumber(item.ccfe);
+                            //持仓价
+                            info.ccj = info.ccdj.times(info.ccfe);
+
+                            let url = "http://fundgz.1234567.com.cn/js/" + item.code + ".js";
+                            $.ajax({
+                                url: url,
+                                type: "GET",
+                                dataType: "jsonp",
+                                jsonpCallback: "jsonpgz",
+                                async: false,
+                                success: function (res) {
+                                    //jsonpgz({"jzrq":"2021-02-23","dwjz":"1.5880","gsz":"1.5803","gszzl":"-0.49","gztime":"2021-02-24 15:00"});
+                                    //console.log(res);
+                                    info.name = res["name"];
+                                    //单位净值
+                                    info.dwjz = new BigNumber(res["dwjz"]);
+                                    //净值日期
+                                    info.jzrq = res["jzrq"];
+                                    //估算值
+                                    info.gsz = new BigNumber(res["gsz"]);
+                                    //估算增长率
+                                    info.gszzl = new BigNumber(res["gszzl"]);
+                                    //估值日期
+                                    info.gztime = res["gztime"];
+                                    //净值价=单位净值*持仓份额
+                                    info.jzj = info.dwjz.times(info.ccfe);
+                                    //净值盈利=净值价-持仓价
+                                    info.jzyl = info.jzj.minus(info.ccj);
+                                    //估值价=估算值*持仓份额
+                                    info.gzj = info.gsz.times(info.ccfe);
+                                    //估值盈利=估值价-净值价
+                                    info.gzyl = info.gzj.minus(info.jzj);
+                                    console.log(info);
+                                    that.fundInfo.push(info);
+                                }
+                            });
+
+                        });
+                    }
+                }
             },
             mounted() {
-                this.getFunds();
+                this.initFunds();
             }
         }
         Vue.createApp(App).use(ElementPlus).mount('#app')
