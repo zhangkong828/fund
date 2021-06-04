@@ -11,3 +11,7 @@
 可以添加自己的基金代码、单价、份额，系统会自动更新计算
 
 
+![](https://raw.githubusercontent.com/zhangkong828/fund/master/img/fund.png)
+
+
+![](https://raw.githubusercontent.com/zhangkong828/fund/master/img/fundadd.png)
