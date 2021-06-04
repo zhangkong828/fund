@@ -296,7 +296,7 @@
             },
             mounted() {
                 this.initFunds();
-                //setInterval(this.refresh, 1000 * 60);
+                setInterval(this.refresh, 1000 * 60);
             }
         }
         Vue.createApp(App).use(ElementPlus).mount('#app')
