@@ -11,10 +11,11 @@
     <script src="https://unpkg.com/element-plus/lib/index.full.js"></script>
     <script src="https://cdn.bootcdn.net/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
     <script src="https://cdn.bootcdn.net/ajax/libs/bignumber.js/9.0.1/bignumber.min.js"></script>
+    <script src="https://cdn.bootcdn.net/ajax/libs/moment.js/2.29.1/moment.min.js"></script>
     <style>
         body,
         html {
-            font-family: 微软雅黑;
+            font-family: "Helvetica Neue", Helvetica, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "微软雅黑", Arial, sans-serif;
             padding: 0;
             margin: 0;
         }
@@ -33,20 +34,7 @@
     <div id="app">
         <el-container>
             <el-header style="text-align: right; font-size: 12px;line-height: 60px;border-bottom: 1px solid #ccc;">
-                <el-dropdown style="margin-left: 10px;">
-                    <span class="el-dropdown-link" style="cursor: pointer;color: #409EFF;">
-                        设置<i class="el-icon-arrow-down el-icon--right"></i>
-                    </span>
-                    <template #dropdown>
-                        <el-dropdown-menu>
-                            <el-dropdown-item @click="dialogFundVisible = true">基金管理</el-dropdown-item>
-                            <el-dropdown-item>
-                                <el-link href="https://github.com/zhangkong828/fund" target="_blank" :underline="false">
-                                    GitHub</el-link>
-                            </el-dropdown-item>
-                        </el-dropdown-menu>
-                    </template>
-                </el-dropdown>
+                <el-link href="https://github.com/zhangkong828/fund" target="_blank" :underline="false">GitHub</el-link>
             </el-header>
             <el-main>
                 <el-row>
@@ -54,17 +42,24 @@
                         <el-card shadow="hover">
                             <el-descriptions title="资金总览" :column="1">
                                 <template #extra>
-                                    <el-button type="primary" size="small">操作</el-button>
-                                  </template>
-                                <el-descriptions-item label="总金额(元)">18100000000</el-descriptions-item>
-                                <el-descriptions-item label="持有收益(元)">18100000000</el-descriptions-item>
-                              </el-descriptions>
+                                    <el-button type="primary" size="small" @click="dialogFundVisible = true">基金管理
+                                    </el-button>
+                                </template>
+                                <el-descriptions-item label="总金额(元)"><span class="plus">{{totalMoney}}</span>
+                                </el-descriptions-item>
+                                <el-descriptions-item label="持有收益(元)"><span
+                                        :class="[totalProfit>0?'plus':'minus']">{{totalProfit}}</span>
+                                </el-descriptions-item>
+                                <el-descriptions-item label="预估收益(元)"><span
+                                        :class="[totalEstimate>0?'plus':'minus']">{{totalEstimate}}</span>
+                                </el-descriptions-item>
+                            </el-descriptions>
                         </el-card>
                     </el-col>
                 </el-row>
                 <el-row>
                     <el-col :span="16" :offset="4">
-                        <el-divider content-position="left">基金看板</el-divider>
+                        <el-divider content-position="left">数据总览</el-divider>
                         <el-table :data="fundInfo" border>
                             <el-table-column prop="code" label="基金代码"></el-table-column>
                             <el-table-column prop="name" label="基金名称" width="200"></el-table-column>
@@ -95,17 +90,24 @@
                             </el-table-column>
                             <el-table-column label="估值" sortable :sort-by="['gszzl']">
                                 <template #default="scope">
-                                    <p>
-                                        <span
-                                            :class="[scope.row.gszzl>0?'plus':'minus']">{{scope.row.gszzl.toString()}}%</span>
-                                        [<span>{{scope.row.gsz.toString()}}</span>]
-                                    </p>
-                                    <p>{{ scope.row.gztime.toString() }}</p>
+                                    <div v-if="scope.row.gztime>today()">
+                                        <p>
+                                            <span
+                                                :class="[scope.row.gszzl>0?'plus':'minus']">{{scope.row.gszzl.toString()}}%</span>
+                                            [<span>{{scope.row.gsz.toString()}}</span>]
+                                        </p>
+                                        <p>{{ scope.row.gzdate }}</p>
+                                    </div>
+                                    <div v-else>--</div>
                                 </template>
                             </el-table-column>
                             <el-table-column label="今日预估(元)" sortable :sort-by="['gzyl']">
                                 <template #default="scope">
-                                    <p :class="[scope.row.gzyl>0?'plus':'minus']">{{ scope.row.gzyl.toFixed(2) }}</p>
+                                    <div v-if="scope.row.gztime>today()">
+                                        <p :class="[scope.row.gzyl>0?'plus':'minus']">{{ scope.row.gzyl.toFixed(2) }}
+                                        </p>
+                                    </div>
+                                    <div v-else>--</div>
                                 </template>
                             </el-table-column>
                         </el-table>
@@ -114,7 +116,7 @@
             </el-main>
         </el-container>
         <el-dialog title="基金管理" v-model="dialogFundVisible" :close-on-click-modal="false">
-            <el-button type="primary" @click="dialogFundAddVisible = true">添加</el-button>
+            <el-button type="primary" @click="fundIndex=-1;dialogFundAddVisible=true;" size="mini">添加</el-button>
             <el-table :data="funds" style="width: 100%" max-height="450">
                 <el-table-column prop="code" label="基金代码">
                 </el-table-column>
@@ -124,28 +126,31 @@
                 </el-table-column>
                 <el-table-column label="操作">
                     <template #default="scope">
-                        <el-button @click.native.prevent="editFund(scope.$index, scope.row)" size="mini">编辑</el-button>
-                        <el-button @click.native.prevent="delFund(scope.$index)" type="danger" size="mini">移除
+                        <el-button
+                            @click.native.prevent="fundIndex=scope.$index;Object.assign(fundForms, scope.row);dialogFundAddVisible=true;"
+                            size="mini">编辑</el-button>
+                        <el-button @click.native.prevent="funds.splice(scope.$index, 1);" type="danger" size="mini">移除
                         </el-button>
                     </template>
                 </el-table-column>
             </el-table>
-            <el-dialog title="添加" v-model="dialogFundAddVisible" append-to-body>
-                <el-form :model="fund">
+            <el-dialog :title="fundIndex==-1?'添加':'编辑'" v-model="dialogFundAddVisible" append-to-body
+                @close="closeForms">
+                <el-form :model="fundForms">
                     <el-form-item label="基金代码">
-                        <el-input v-model="fund.code" autocomplete="off"></el-input>
+                        <el-input v-model="fundForms.code" autocomplete="off"></el-input>
                     </el-form-item>
                     <el-form-item label="持仓单价">
-                        <el-input v-model.number="fund.ccdj" autocomplete="off"></el-input>
+                        <el-input v-model.number="fundForms.ccdj" autocomplete="off"></el-input>
                     </el-form-item>
                     <el-form-item label="持仓份额">
-                        <el-input v-model.number="fund.ccfe" autocomplete="off"></el-input>
+                        <el-input v-model.number="fundForms.ccfe" autocomplete="off"></el-input>
                     </el-form-item>
                 </el-form>
                 <template #footer>
                     <span class="dialog-footer">
                         <el-button @click="dialogFundAddVisible = false">取 消</el-button>
-                        <el-button type="primary" @click="addFund">确 定</el-button>
+                        <el-button type="primary" @click="submitFund">确 定</el-button>
                     </span>
                 </template>
             </el-dialog>
@@ -161,7 +166,8 @@
                     dialogFundVisible: false,
                     dialogFundAddVisible: false,
                     funds: [],
-                    fund: {
+                    fundIndex: -1,
+                    fundForms: {
                         code: "",//基金代码
                         ccdj: 0,//持仓单价
                         ccfe: 0//持仓份额
@@ -169,12 +175,20 @@
                     fundInfo: []
                 }
             },
+            computed: {
+                totalMoney() {
+                    return this.fundInfo.reduce((total, item) => total.plus(item.jzj), new BigNumber(0)).toFixed(2);
+                },
+                totalProfit() {
+                    return this.fundInfo.reduce((total, item) => total.plus(item.jzyl), new BigNumber(0)).toFixed(2);
+                },
+                totalEstimate() {
+                    return this.fundInfo.reduce((total, item) => total.plus(item.gzyl), new BigNumber(0)).toFixed(2);
+                }
+            },
             watch: {
                 funds: {
-                    handler(newValue, oldValue) {
-                        var str = JSON.stringify(newValue);
-                        localStorage.setItem('funds', str);
-                    },
+                    handler: 'fundsRefresh',
                     deep: true
                 }
             },
@@ -183,23 +197,27 @@
                     var val = localStorage.getItem('funds');
                     if (val != null) {
                         this.funds = JSON.parse(val);
-                        if (this.funds.length != 0) {
-                            this.query();
-                            return;
-                        }
+                        if (this.funds.length != 0) return;
                     }
-                    this.funds.push({ code: "161725", ccdj: 0, ccfe: 0 });//白酒 yyds
+                    this.funds.push({ code: "161725", ccdj: 1.4507, ccfe: 8000 });//白酒 yyds
                     this.$message.error({ showClose: true, message: '请先添加基金代码' });
                 },
-                addFund() {
-                    this.funds.push(this.fund);
-                    this.fund = this.$options.data.call(this).fund;
+                submitFund() {
+                    if (this.fundIndex == -1) {
+                        this.funds.push(this.fundForms);
+                    } else {
+                        Object.assign(this.funds[this.fundIndex], this.fundForms);
+                    }
                     this.dialogFundAddVisible = false;
                 },
-                delFund(index) {
-                    this.funds.splice(index, 1);
+                closeForms() {
+                    this.fundForms = this.$options.data.call(this).fundForms;
                 },
-                editFund(index, row) { },
+                fundsRefresh(newValue, oldValue) {
+                    var str = JSON.stringify(newValue);
+                    localStorage.setItem('funds', str);
+                    this.query();
+                },
                 query() {
                     var that = this;
                     if (that.funds.length > 0) {
@@ -209,16 +227,14 @@
                             info.ccfe = new BigNumber(item.ccfe);
                             //持仓价
                             info.ccj = info.ccdj.times(info.ccfe);
-
                             let url = "http://fundgz.1234567.com.cn/js/" + item.code + ".js";
                             $.ajax({
                                 url: url,
                                 type: "GET",
                                 dataType: "jsonp",
                                 jsonpCallback: "jsonpgz",
-                                async: false,
                                 success: function (res) {
-                                    //jsonpgz({"jzrq":"2021-02-23","dwjz":"1.5880","gsz":"1.5803","gszzl":"-0.49","gztime":"2021-02-24 15:00"});
+                                    //jsonpgz({"fundcode":"161725","name":"招商中证白酒指数(LOF)A","jzrq":"2021-06-03","dwjz":"1.5900","gsz":"1.5944","gszzl":"0.28","gztime":"2021-06-04 09:41"});
                                     //console.log(res);
                                     info.name = res["name"];
                                     //单位净值
@@ -230,7 +246,8 @@
                                     //估算增长率
                                     info.gszzl = new BigNumber(res["gszzl"]);
                                     //估值日期
-                                    info.gztime = res["gztime"];
+                                    info.gztime = new Date(res["gztime"]);
+                                    info.gzdate = moment(info.gztime).format("YYYY-MM-DD");
                                     //净值价=单位净值*持仓份额
                                     info.jzj = info.dwjz.times(info.ccfe);
                                     //净值盈利=净值价-持仓价
@@ -239,14 +256,14 @@
                                     info.gzj = info.gsz.times(info.ccfe);
                                     //估值盈利=估值价-净值价
                                     info.gzyl = info.gzj.minus(info.jzj);
-                                    console.log(info);
                                     that.fundInfo.push(info);
                                 }
                             });
 
                         });
                     }
-                }
+                },
+                today() { return moment().startOf('day'); }
             },
             mounted() {
                 this.initFunds();
