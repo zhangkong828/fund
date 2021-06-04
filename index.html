@@ -33,8 +33,15 @@
 <body>
     <div id="app">
         <el-container>
-            <el-header style="text-align: right; font-size: 12px;line-height: 60px;border-bottom: 1px solid #ccc;">
-                <el-link href="https://github.com/zhangkong828/fund" target="_blank" :underline="false">GitHub</el-link>
+            <el-header style="border-bottom: 1px solid #ccc;">
+                <el-row>
+                    <el-col :span="8" :offset="4">
+                        <el-link href="/" :underline="false"><h1>基金看板</h1></el-link>
+                    </el-col>
+                    <el-col :span="8" style="text-align: right;line-height: 60px;">
+                        <el-link href="https://github.com/zhangkong828/fund" target="_blank" :underline="false">GitHub</el-link>
+                    </el-col>
+                </el-row>
             </el-header>
             <el-main>
                 <el-row>
@@ -90,7 +97,7 @@
                             </el-table-column>
                             <el-table-column label="估值" sortable :sort-by="['gszzl']">
                                 <template #default="scope">
-                                    <div v-if="scope.row.gztime>today()">
+                                    <div v-if="scope.row.gztime>today">
                                         <p>
                                             <span
                                                 :class="[scope.row.gszzl>0?'plus':'minus']">{{scope.row.gszzl.toString()}}%</span>
@@ -103,7 +110,7 @@
                             </el-table-column>
                             <el-table-column label="今日预估(元)" sortable :sort-by="['gzyl']">
                                 <template #default="scope">
-                                    <div v-if="scope.row.gztime>today()">
+                                    <div v-if="scope.row.gztime>today">
                                         <p :class="[scope.row.gzyl>0?'plus':'minus']">{{ scope.row.gzyl.toFixed(2) }}
                                         </p>
                                     </div>
@@ -176,6 +183,7 @@
                 }
             },
             computed: {
+                today() { return moment().startOf('day'); },
                 totalMoney() {
                     return this.fundInfo.reduce((total, item) => total.plus(item.jzj), new BigNumber(0)).toFixed(2);
                 },
@@ -188,7 +196,7 @@
             },
             watch: {
                 funds: {
-                    handler: 'fundsRefresh',
+                    handler: 'fundsSync',
                     deep: true
                 }
             },
@@ -199,7 +207,7 @@
                         this.funds = JSON.parse(val);
                         if (this.funds.length != 0) return;
                     }
-                    this.funds.push({ code: "161725", ccdj: 1.4507, ccfe: 8000 });//白酒 yyds
+                    this.funds.push({ code: "161725", ccdj: 1.2507, ccfe: 8000 });//白酒 yyds
                     this.$message.error({ showClose: true, message: '请先添加基金代码' });
                 },
                 submitFund() {
@@ -213,60 +221,82 @@
                 closeForms() {
                     this.fundForms = this.$options.data.call(this).fundForms;
                 },
-                fundsRefresh(newValue, oldValue) {
+                fundsSync(newValue, oldValue) {
                     var str = JSON.stringify(newValue);
                     localStorage.setItem('funds', str);
-                    this.query();
+                    this.refresh();
                 },
-                query() {
+                refresh() {
                     var that = this;
                     if (that.funds.length > 0) {
-                        that.funds.forEach(item => {
-                            var info = { code: item.code };
-                            info.ccdj = new BigNumber(item.ccdj);
-                            info.ccfe = new BigNumber(item.ccfe);
-                            //持仓价
-                            info.ccj = info.ccdj.times(info.ccfe);
-                            let url = "http://fundgz.1234567.com.cn/js/" + item.code + ".js";
-                            $.ajax({
-                                url: url,
-                                type: "GET",
-                                dataType: "jsonp",
-                                jsonpCallback: "jsonpgz",
-                                success: function (res) {
-                                    //jsonpgz({"fundcode":"161725","name":"招商中证白酒指数(LOF)A","jzrq":"2021-06-03","dwjz":"1.5900","gsz":"1.5944","gszzl":"0.28","gztime":"2021-06-04 09:41"});
-                                    //console.log(res);
-                                    info.name = res["name"];
-                                    //单位净值
-                                    info.dwjz = new BigNumber(res["dwjz"]);
-                                    //净值日期
-                                    info.jzrq = res["jzrq"];
-                                    //估算值
-                                    info.gsz = new BigNumber(res["gsz"]);
-                                    //估算增长率
-                                    info.gszzl = new BigNumber(res["gszzl"]);
-                                    //估值日期
-                                    info.gztime = new Date(res["gztime"]);
-                                    info.gzdate = moment(info.gztime).format("YYYY-MM-DD");
-                                    //净值价=单位净值*持仓份额
-                                    info.jzj = info.dwjz.times(info.ccfe);
-                                    //净值盈利=净值价-持仓价
-                                    info.jzyl = info.jzj.minus(info.ccj);
-                                    //估值价=估算值*持仓份额
-                                    info.gzj = info.gsz.times(info.ccfe);
-                                    //估值盈利=估值价-净值价
-                                    info.gzyl = info.gzj.minus(info.jzj);
-                                    that.fundInfo.push(info);
+                        var running = false, runIndex = 0, interval = 0;
+                        interval = setInterval(function () {
+                            if (runIndex >= that.funds.length) {
+                                clearInterval(interval);
+                            } else {
+                                if (!running) {
+                                    running = true;
+                                    var url = "http://fundgz.1234567.com.cn/js/" + that.funds[runIndex].code + ".js";
+                                    $.ajax({
+                                        url: url,
+                                        type: "GET",
+                                        cache: false,
+                                        dataType: "jsonp",
+                                        jsonpCallback: "jsonpgz",
+                                        success: function (res) {
+                                            console.log(res);
+                                            var newInfo = that.compute(res);
+                                            var info = that.fundInfo.find(x => x.code == newInfo.code);
+                                            if (info) {
+                                                Object.assign(info, newInfo);
+                                            } else {
+                                                that.fundInfo.push(newInfo);
+                                            }
+                                        },
+                                        complete: function () {
+                                            runIndex++;
+                                            running = false;
+                                        }
+                                    })
                                 }
-                            });
-
-                        });
+                            }
+                        }, 100);
                     }
                 },
-                today() { return moment().startOf('day'); }
+                compute(res) {
+                    var fundcode = res["fundcode"];
+                    var fund = this.funds.find(i => i.code == fundcode);
+                    var info = { code: fundcode };
+                    info.ccdj = new BigNumber(fund.ccdj);
+                    info.ccfe = new BigNumber(fund.ccfe);
+                    //持仓价
+                    info.ccj = info.ccdj.times(info.ccfe);
+                    info.name = res["name"];
+                    //单位净值
+                    info.dwjz = new BigNumber(res["dwjz"]);
+                    //净值日期
+                    info.jzrq = res["jzrq"];
+                    //估算值
+                    info.gsz = new BigNumber(res["gsz"]);
+                    //估算增长率
+                    info.gszzl = new BigNumber(res["gszzl"]);
+                    //估值日期
+                    info.gztime = new Date(res["gztime"]);
+                    info.gzdate = moment(info.gztime).format("YYYY-MM-DD");
+                    //净值价=单位净值*持仓份额
+                    info.jzj = info.dwjz.times(info.ccfe);
+                    //净值盈利=净值价-持仓价
+                    info.jzyl = info.jzj.minus(info.ccj);
+                    //估值价=估算值*持仓份额
+                    info.gzj = info.gsz.times(info.ccfe);
+                    //估值盈利=估值价-净值价
+                    info.gzyl = info.gzj.minus(info.jzj);
+                    return info;
+                },
             },
             mounted() {
                 this.initFunds();
+                //setInterval(this.refresh, 1000 * 60);
             }
         }
         Vue.createApp(App).use(ElementPlus).mount('#app')
