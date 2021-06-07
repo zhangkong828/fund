@@ -36,10 +36,13 @@
             <el-header style="border-bottom: 1px solid #ccc;">
                 <el-row>
                     <el-col :span="8" :offset="4">
-                        <el-link href="/" :underline="false"><h1>基金看板</h1></el-link>
+                        <el-link href="/" :underline="false">
+                            <h1>基金看板</h1>
+                        </el-link>
                     </el-col>
                     <el-col :span="8" style="text-align: right;line-height: 60px;">
-                        <el-link href="https://github.com/zhangkong828/fund" target="_blank" :underline="false">GitHub</el-link>
+                        <el-link href="https://github.com/zhangkong828/fund" target="_blank" :underline="false">GitHub
+                        </el-link>
                     </el-col>
                 </el-row>
             </el-header>
@@ -288,10 +291,16 @@
                     info.jzj = info.dwjz.times(info.ccfe);
                     //净值盈利=净值价-持仓价
                     info.jzyl = info.jzj.minus(info.ccj);
-                    //估值价=估算值*持仓份额
-                    info.gzj = info.gsz.times(info.ccfe);
-                    //估值盈利=估值价-净值价
-                    info.gzyl = info.gzj.minus(info.jzj);
+                    //估值小于当天 不计算
+                    if (info.gztime < this.today) {
+                        info.gzj = 0;
+                        info.gzyl = 0;
+                    } else {
+                        //估值价=估算值*持仓份额
+                        info.gzj = info.gsz.times(info.ccfe);
+                        //估值盈利=估值价-净值价
+                        info.gzyl = info.gzj.minus(info.jzj);
+                    }
                     return info;
                 },
             },
